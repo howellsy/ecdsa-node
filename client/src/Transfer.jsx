@@ -1,7 +1,8 @@
 import { useState } from "react";
 import server from "./server";
+import { signMessage } from "./utils/crypto";
 
-function Transfer({ address, setBalance }) {
+function Transfer({ address, privateKey, setBalance }) {
   const [sendAmount, setSendAmount] = useState("");
   const [recipient, setRecipient] = useState("");
 
@@ -10,17 +11,31 @@ function Transfer({ address, setBalance }) {
   async function transfer(evt) {
     evt.preventDefault();
 
+    if (privateKey.length === 0) {
+      window.alert("Please enter a private key to sign the transaction");
+      return;
+    }
+
     try {
-      const {
-        data: { balance },
-      } = await server.post(`send`, {
-        sender: address,
-        amount: parseInt(sendAmount),
-        recipient,
-      });
-      setBalance(balance);
-    } catch (ex) {
-      alert(ex.response.data.message);
+      const [signature, rBit] = await signMessage(sendAmount, privateKey);
+
+      if (signature) {
+        const { data: { balance } } = await server.post(`send`, {
+          sender: address,
+          amount: parseInt(sendAmount),
+          recipient,
+          signature,
+          rBit
+        });
+
+        setBalance(balance);
+      }
+    } catch (error) {
+      if (error?.request?.status === 401) {
+        window.alert("You are not authorised to make this transaction");
+      } else {
+        window.alert(error);
+      }
     }
   }
 
@@ -29,18 +44,18 @@ function Transfer({ address, setBalance }) {
       <h1>Send Transaction</h1>
 
       <label>
-        Send Amount
+        Send Amount:
         <input
-          placeholder="1, 2, 3..."
+          placeholder="Type an amount"
           value={sendAmount}
           onChange={setValue(setSendAmount)}
         ></input>
       </label>
 
       <label>
-        Recipient
+        Recipient:
         <input
-          placeholder="Type an address, for example: 0x2"
+          placeholder="Type an address"
           value={recipient}
           onChange={setValue(setRecipient)}
         ></input>
